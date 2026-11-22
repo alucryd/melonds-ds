@@ -26,6 +26,12 @@
 #include <compat/strl.h>
 #include <file/file_path.h>
 #include <string/stdstring.h>
+#ifdef HAVE_ORE
+#include <strings.h>
+#include <vector>
+#include <fmt/format.h>
+#include <smelt.h>
+#endif
 
 #include "console/dsi.hpp"
 #include "constants.hpp"
@@ -896,8 +902,58 @@ void MelonDsDs::CoreState::FallBackToSoftwareRenderer() noexcept {
     }
 }
 
+#ifdef HAVE_ORE
+/// When game is an ORE, oxyromon's ROM format, smelts the ROM it holds into
+/// storage and returns game pointing at it, for GameInfo to copy; returns
+/// game as it is otherwise. The frontend passes an ORE by path alone (see
+/// content_overrides), which is what libsmelt reads.
+static retro_game_info SmeltIfOre(const retro_game_info& game, std::vector<std::byte>& storage, bool gba) {
+    size_t len = game.path ? strlen(game.path) : 0;
+    if (len < 4 || strcasecmp(game.path + len - 4, ".ore") != 0)
+        return game;
+
+    struct Ingot {
+        smelt_ingot* ingot = nullptr;
+        ~Ingot() { smelt_close(ingot); }
+    } ore;
+    uint64_t size = 0;
+    char platform[32];
+    size_t platformLen = sizeof(platform);
+    if (smelt_open(game.path, nullptr, &ore.ingot) != SMELT_OK ||
+        smelt_logical_size(ore.ingot, &size) != SMELT_OK ||
+        smelt_platform(ore.ingot, platform, &platformLen) != SMELT_OK) {
+        throw MelonDsDs::content_exception(fmt::format("ORE {}: {}", game.path, smelt_last_error()));
+    }
+
+    std::string_view p = platform;
+    if (gba ? p != "gba" : (p != "nds" && p != "dsi")) {
+        throw MelonDsDs::content_exception(fmt::format(
+            "ORE {} is a {} ROM, which melonDS DS does not run in the {} slot", game.path, p, gba ? "GBA" : "DS"));
+    }
+
+    // The largest DS carts are 512 MiB, GBA ones 32
+    if (size == 0 || size > (gba ? (32ull << 20) : (512ull << 20))) {
+        throw MelonDsDs::content_exception(fmt::format("ORE {} holds {} bytes, too many for a {} ROM", game.path, size, p));
+    }
+
+    storage.resize(size);
+    if (smelt_read(ore.ingot, 0, reinterpret_cast<uint8_t*>(storage.data()), storage.size()) != SMELT_OK) {
+        throw MelonDsDs::content_exception(fmt::format("ORE {}: {}", game.path, smelt_last_error()));
+    }
+
+    retro_game_info smelted = game;
+    smelted.data = storage.data();
+    smelted.size = storage.size();
+    return smelted;
+}
+#endif
+
 void MelonDsDs::CoreState::InitContent(unsigned type, std::span<const retro_game_info> game) {
     ZoneScopedN(TracyFunction);
+#ifdef HAVE_ORE
+    // Hold smelted ROMs until GameInfo has copied them
+    std::vector<std::byte> ndsOre, gbaOre;
+#endif
 
     // First initialize the content info...
     switch (type) {
@@ -911,8 +967,13 @@ void MelonDsDs::CoreState::InitContent(unsigned type, std::span<const retro_game
         case MELONDSDS_GAME_TYPE_SLOT_1_2_BOOT_NO_SRAM:
             if (game.size() > 1) {
                 // If we got a GBA ROM...
-                retro_assert(game[1].data != nullptr);
-                _gbaInfo = game[1];
+#ifdef HAVE_ORE
+                retro_game_info gbaGame = SmeltIfOre(game[1], gbaOre, true);
+#else
+                const retro_game_info& gbaGame = game[1];
+#endif
+                retro_assert(gbaGame.data != nullptr);
+                _gbaInfo = gbaGame;
             }
 
             [[fallthrough]];
@@ -927,15 +988,21 @@ void MelonDsDs::CoreState::InitContent(unsigned type, std::span<const retro_game
                     throw content_exception("Loaded a save file instead of a ROM, ensure that you opened the right file.");
                 }
 
-                if (game[0].size == 0) {
+#ifdef HAVE_ORE
+                retro_game_info ndsGame = SmeltIfOre(game[0], ndsOre, false);
+#else
+                const retro_game_info& ndsGame = game[0];
+#endif
+
+                if (ndsGame.size == 0) {
                     throw content_exception("Loaded an empty file as content, please load a valid Nintendo DS ROM.");
                 }
 
-                if (game[0].data == nullptr) {
+                if (ndsGame.data == nullptr) {
                     throw content_exception("Failed to load the content data, the frontend may have a bug.");
                 }
 
-                _ndsInfo = game[0];
+                _ndsInfo = ndsGame;
             }
             break;
         default:

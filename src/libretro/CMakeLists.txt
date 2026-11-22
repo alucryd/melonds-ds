@@ -317,6 +317,17 @@ if (HAVE_NETWORKING)
     endif()
 endif()
 
+if (ORE)
+    # A Rust staticlib built for the host, so linux only for now; the
+    # libraries after it are libstd's, from rustc --print native-static-libs
+    if (NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(FATAL_ERROR "ORE is wired for linux only; the other platforms need libsmelt's native-static-libs for their own libc")
+    endif()
+    target_compile_definitions(melondsds_libretro PRIVATE HAVE_ORE)
+    target_include_directories(melondsds_libretro PRIVATE "${SMELT_DIR}/include")
+    target_link_libraries(melondsds_libretro PRIVATE "${SMELT_DIR}/target/release/libsmelt.a" pthread dl m rt util)
+endif()
+
 if (TRACY_ENABLE)
     target_link_libraries(melondsds_libretro PUBLIC TracyClient)
     target_include_directories(melondsds_libretro SYSTEM PUBLIC TracyClient)

@@ -116,6 +116,13 @@ else ()
 endif()
 
 message(STATUS "${MELONDSDS_NAME} version string: '${MELONDSDS_VERSION}'")
+
+option(ORE "Read ORE content through libsmelt; set SMELT_DIR to oxyromon's crates/smelt-rs, built with cargo build --release" OFF)
+set(SMELT_DIR "" CACHE PATH "oxyromon's crates/smelt-rs, for ORE")
+set(MELONDSDS_EXTENSIONS "nds|ids|dsi")
+if (ORE)
+    string(APPEND MELONDSDS_EXTENSIONS "|ore")
+endif()
 configure_file("${CMAKE_SOURCE_DIR}/melondsds_libretro.info.in" "${CMAKE_CURRENT_BINARY_DIR}/melondsds_libretro.info")
 
 # Formerly off by default due to a bug that has since been fixed.

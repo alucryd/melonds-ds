@@ -173,7 +173,11 @@ PUBLIC_SYMBOL void retro_get_system_info(struct retro_system_info *info) {
     info->block_extract = false;
     info->library_version = MELONDSDS_VERSION;
     info->need_fullpath = false;
+#ifdef HAVE_ORE
+    info->valid_extensions = "nds|ids|dsi|ore";
+#else
     info->valid_extensions = "nds|ids|dsi";
+#endif
 }
 
 PUBLIC_SYMBOL void retro_reset(void) {

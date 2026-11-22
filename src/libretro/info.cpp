@@ -32,6 +32,15 @@ const struct retro_system_content_info_override MelonDsDs::content_overrides[] =
         true
         // We need to keep the ROM around for reloads
     },
+#ifdef HAVE_ORE
+    {
+        "ore",
+        true,
+        false
+        // libsmelt reads the file itself, so the frontend needn't load it,
+        // and the smelted ROM is kept by the core
+    },
+#endif
     {}
 };
 
@@ -41,8 +50,13 @@ static const struct retro_subsystem_memory_info nds_memory[] = {
 };
 
 static const struct retro_subsystem_rom_info slot_1_2_roms[] = {
+#ifdef HAVE_ORE
+    {"Nintendo DS (Slot 1)", "nds|ore", false, false, true,  nds_memory, ARRAY_SIZE(nds_memory)},
+    {"GBA (Slot 2)",         "gba|ore", false, false, true,  nullptr, 0},
+#else
     {"Nintendo DS (Slot 1)", "nds",     false, false, true,  nds_memory, ARRAY_SIZE(nds_memory)},
     {"GBA (Slot 2)",         "gba",     false, false, true,  nullptr, 0},
+#endif
     {"GBA Save Data",        "srm|sav", true, true, false, nullptr, 0},
 };
 

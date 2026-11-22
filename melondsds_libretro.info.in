@@ -7,7 +7,7 @@ categories = "Emulator"
 corename = "${MELONDSDS_NAME}"
 license = "GPLv3+"
 permissions = "dynarec_optional|microphone_optional"
-supported_extensions = "nds|ids|dsi"
+supported_extensions = "@MELONDSDS_EXTENSIONS@"
 
 # Hardware Information
 manufacturer = "Nintendo"
